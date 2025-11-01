@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import '../../../../core/database/models/habit_model.dart';
 import '../../../../core/database/models/progress_model.dart';
 import '../../data/habit_repository.dart';
 import '../widgets/habit_card.dart';
 import 'habit_detail_page.dart';
+import '../../../progress/presentation/pages/progress_dashboard.dart'
+    show completionStatsProvider, userStatsProvider;
 
 final habitRepositoryProvider = Provider((ref) => HabitRepository());
 
@@ -18,7 +21,8 @@ final todayProgressProvider = FutureProvider<Map<int, bool>>((ref) async {
   return await repository.getTodayProgress();
 });
 
-final habitStreaksProvider = FutureProvider.family<int, int>((ref, habitId) async {
+final habitStreaksProvider =
+    FutureProvider.family<int, int>((ref, habitId) async {
   final repository = ref.read(habitRepositoryProvider);
   return await repository.calculateStreak(habitId);
 });
@@ -71,10 +75,11 @@ class HabitsListPage extends ConsumerWidget {
                   itemBuilder: (context, index) {
                     final habit = habits[index];
                     final isCompleted = todayProgress[habit.id] ?? false;
-                    
+
                     return Consumer(
                       builder: (context, ref, child) {
-                        final streakAsync = ref.watch(habitStreaksProvider(habit.id!));
+                        final streakAsync =
+                            ref.watch(habitStreaksProvider(habit.id!));
                         return streakAsync.when(
                           data: (streak) {
                             return HabitCard(
@@ -82,21 +87,28 @@ class HabitsListPage extends ConsumerWidget {
                               streak: streak,
                               isCompletedToday: isCompleted,
                               onTap: () {
+                                debugPrint(
+                                    '[Navigation] Opening habit detail for id: [1m${habit.id}[0m');
                                 Navigator.push(
                                   context,
                                   MaterialPageRoute(
-                                    builder: (context) => HabitDetailPage(habitId: habit.id!),
+                                    builder: (context) =>
+                                        HabitDetailPage(habitId: habit.id!),
                                   ),
                                 ).then((_) {
+                                  debugPrint(
+                                      '[Navigation] Returned from habit detail for id: ${habit.id}');
                                   ref.invalidate(habitsProvider);
                                   ref.invalidate(todayProgressProvider);
                                 });
                               },
                               onCheckboxTap: () async {
-                                final repository = ref.read(habitRepositoryProvider);
+                                final repository =
+                                    ref.read(habitRepositoryProvider);
                                 final today = DateTime.now();
                                 final newStatus = !isCompleted;
-                                
+                                debugPrint(
+                                    '[Progress] Marking habit ${habit.id} as ${newStatus ? 'completed' : 'not completed'} for $today');
                                 await repository.markProgress(
                                   ProgressModel(
                                     habitId: habit.id!,
@@ -104,9 +116,15 @@ class HabitsListPage extends ConsumerWidget {
                                     completed: newStatus,
                                   ),
                                 );
-                                
+                                debugPrint(
+                                    '[Progress] Marked habit ${habit.id} as ${newStatus ? 'completed' : 'not completed'}');
+                                // Invalidate all relevant providers for live updates
                                 ref.invalidate(todayProgressProvider);
                                 ref.invalidate(habitStreaksProvider(habit.id!));
+                                ref.invalidate(completionStatsProvider);
+                                ref.invalidate(userStatsProvider);
+                                ref.invalidate(
+                                    habitProgressProvider(habit.id!));
                               },
                             );
                           },
@@ -181,6 +199,8 @@ class HabitsListPage extends ConsumerWidget {
               if (nameController.text.trim().isNotEmpty) {
                 final repository = ref.read(habitRepositoryProvider);
                 final now = DateTime.now();
+                debugPrint(
+                    '[Habit] Creating habit: ${nameController.text.trim()}');
                 await repository.createHabit(
                   HabitModel(
                     name: nameController.text.trim(),
@@ -191,8 +211,16 @@ class HabitsListPage extends ConsumerWidget {
                     updatedAt: now,
                   ),
                 );
+                debugPrint('[Habit] Created habit successfully');
+                // Invalidate all relevant providers for live updates
                 ref.invalidate(habitsProvider);
+                ref.invalidate(todayProgressProvider);
+                ref.invalidate(habitStreaksProvider);
+                ref.invalidate(completionStatsProvider);
+                ref.invalidate(userStatsProvider);
+                ref.invalidate(habitProgressProvider);
                 if (context.mounted) {
+                  debugPrint('[Navigation] Closing add habit dialog');
                   Navigator.pop(context);
                 }
               }
@@ -204,4 +232,3 @@ class HabitsListPage extends ConsumerWidget {
     );
   }
 }
-

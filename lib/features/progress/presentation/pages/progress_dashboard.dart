@@ -8,7 +8,8 @@ import '../widgets/streak_widget.dart';
 
 final habitRepositoryProviderForProgress = Provider((ref) => HabitRepository());
 
-final completionStatsProvider = FutureProvider<Map<String, dynamic>>((ref) async {
+final completionStatsProvider =
+    FutureProvider<Map<String, dynamic>>((ref) async {
   final repository = ref.read(habitRepositoryProviderForProgress);
   return await repository.getCompletionStats();
 });
@@ -23,6 +24,7 @@ class ProgressDashboard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    debugPrint('[ProgressDashboard] Building dashboard UI');
     final statsAsync = ref.watch(completionStatsProvider);
     final userStatsAsync = ref.watch(userStatsProvider);
 
@@ -66,10 +68,12 @@ class ProgressDashboard extends ConsumerWidget {
                           return Column(
                             children: [
                               Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
                                 children: [
                                   Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         '$completed / $total',
@@ -148,7 +152,8 @@ class ProgressDashboard extends ConsumerWidget {
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
                                   children: [
-                                    const Icon(Icons.emoji_events, size: 32, color: Colors.amber),
+                                    const Icon(Icons.emoji_events,
+                                        size: 32, color: Colors.amber),
                                     const SizedBox(height: 8),
                                     Text(
                                       '${userStats.level}',
@@ -176,7 +181,8 @@ class ProgressDashboard extends ConsumerWidget {
                                 padding: const EdgeInsets.all(16),
                                 child: Column(
                                   children: [
-                                    const Icon(Icons.stars, size: 32, color: Colors.blue),
+                                    const Icon(Icons.stars,
+                                        size: 32, color: Colors.blue),
                                     const SizedBox(height: 8),
                                     Text(
                                       '${userStats.totalPoints}',
@@ -224,7 +230,8 @@ class ProgressDashboard extends ConsumerWidget {
                 icon: const Icon(Icons.view_list),
                 label: const Text('View All Habits'),
                 style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 ),
               ),
             ],
@@ -234,4 +241,3 @@ class ProgressDashboard extends ConsumerWidget {
     );
   }
 }
-

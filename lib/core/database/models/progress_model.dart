@@ -14,26 +14,33 @@ class ProgressModel {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+    final map = <String, dynamic>{
       'habit_id': habitId,
       'date': date.toIso8601String().split('T')[0], // Store only date part
       'completed': completed ? 1 : 0, // Use 1/0 for compatibility
       'notes': notes,
     };
+    if (id != null) {
+      map['id'] = id;
+    }
+    return map;
   }
 
   factory ProgressModel.fromMap(Map<String, dynamic> map) {
     // Handle both int (0/1) and bool for completed field
     final completedValue = map['completed'];
-    final bool isCompleted = completedValue is bool 
-        ? completedValue 
+    final bool isCompleted = completedValue is bool
+        ? completedValue
         : (completedValue is int ? completedValue == 1 : false);
-    
+
     return ProgressModel(
-      id: map['id'] is int ? map['id'] : (map['id'] != null ? int.parse(map['id'].toString()) : null),
-      habitId: map['habit_id'] is int ? map['habit_id'] : int.parse(map['habit_id'].toString()),
-      date: map['date'] is DateTime 
+      id: map['id'] is int
+          ? map['id']
+          : (map['id'] != null ? int.parse(map['id'].toString()) : null),
+      habitId: map['habit_id'] is int
+          ? map['habit_id']
+          : int.parse(map['habit_id'].toString()),
+      date: map['date'] is DateTime
           ? map['date'] as DateTime
           : DateTime.parse(map['date'] as String),
       completed: isCompleted,
@@ -57,4 +64,3 @@ class ProgressModel {
     );
   }
 }
-

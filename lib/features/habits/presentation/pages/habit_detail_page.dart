@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../../../core/database/models/habit_model.dart';
 import '../../../../core/database/models/progress_model.dart';
 import 'habits_list_page.dart';
+import '../../../progress/presentation/pages/progress_dashboard.dart'
+    show completionStatsProvider, userStatsProvider;
 
 class HabitDetailPage extends ConsumerStatefulWidget {
   final int habitId;
@@ -14,15 +16,28 @@ class HabitDetailPage extends ConsumerStatefulWidget {
   ConsumerState<HabitDetailPage> createState() => _HabitDetailPageState();
 }
 
+final habitDetailProvider =
+    FutureProvider.family<HabitModel?, int>((ref, habitId) async {
+  debugPrint('[Detail] Loading habit detail for id: $habitId');
+  final repository = ref.read(habitRepositoryProvider);
+  final habit = await repository.getHabitById(habitId);
+  debugPrint('[Detail] Loaded habit: ${habit?.name ?? 'null'}');
+  return habit;
+});
+
+final habitProgressProvider =
+    FutureProvider.family<List<ProgressModel>, int>((ref, habitId) async {
+  debugPrint('[Detail] Loading progress for habit id: $habitId');
+  final repository = ref.read(habitRepositoryProvider);
+  final progress = await repository.getProgressForHabit(habitId, limit: 30);
+  debugPrint('[Detail] Loaded progress count: ${progress.length}');
+  return progress;
+});
+
 class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
   @override
   Widget build(BuildContext context) {
-    final habitAsync = ref.watch(
-      FutureProvider<HabitModel?>((ref) async {
-        final repository = ref.read(habitRepositoryProvider);
-        return await repository.getHabitById(widget.habitId);
-      }),
-    );
+    final habitAsync = ref.watch(habitDetailProvider(widget.habitId));
 
     return Scaffold(
       appBar: AppBar(
@@ -64,14 +79,10 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
     );
   }
 
-  Widget _buildHabitDetails(BuildContext context, WidgetRef ref, HabitModel habit) {
+  Widget _buildHabitDetails(
+      BuildContext context, WidgetRef ref, HabitModel habit) {
     final streakAsync = ref.watch(habitStreaksProvider(habit.id!));
-    final progressAsync = ref.watch(
-      FutureProvider<List<ProgressModel>>((ref) async {
-        final repository = ref.read(habitRepositoryProvider);
-        return await repository.getProgressForHabit(habit.id!, limit: 30);
-      }),
-    );
+    final progressAsync = ref.watch(habitProgressProvider(habit.id!));
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -91,7 +102,8 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  if (habit.description != null && habit.description!.isNotEmpty)
+                  if (habit.description != null &&
+                      habit.description!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8),
                       child: Text(
@@ -105,7 +117,8 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
                   const SizedBox(height: 16),
                   Row(
                     children: [
-                      const Icon(Icons.local_fire_department, color: Colors.orange),
+                      const Icon(Icons.local_fire_department,
+                          color: Colors.orange),
                       const SizedBox(width: 8),
                       streakAsync.when(
                         data: (streak) => Text(
@@ -157,11 +170,14 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
                   final progress = progressList[index];
                   return ListTile(
                     leading: Icon(
-                      progress.completed ? Icons.check_circle : Icons.radio_button_unchecked,
+                      progress.completed
+                          ? Icons.check_circle
+                          : Icons.radio_button_unchecked,
                       color: progress.completed ? Colors.green : Colors.grey,
                     ),
                     title: Text(DateFormat('MMM d, y').format(progress.date)),
-                    subtitle: progress.notes != null ? Text(progress.notes!) : null,
+                    subtitle:
+                        progress.notes != null ? Text(progress.notes!) : null,
                     trailing: progress.completed
                         ? const Icon(Icons.done, color: Colors.green)
                         : null,
@@ -177,9 +193,11 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
     );
   }
 
-  void _showEditHabitDialog(BuildContext context, WidgetRef ref, HabitModel habit) {
+  void _showEditHabitDialog(
+      BuildContext context, WidgetRef ref, HabitModel habit) {
     final nameController = TextEditingController(text: habit.name);
-    final descriptionController = TextEditingController(text: habit.description ?? '');
+    final descriptionController =
+        TextEditingController(text: habit.description ?? '');
 
     showDialog(
       context: context,
@@ -223,7 +241,7 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
                         : descriptionController.text.trim(),
                   ),
                 );
-                  ref.invalidate(habitsProvider);
+                ref.invalidate(habitsProvider);
                 if (context.mounted) {
                   Navigator.pop(context);
                   Navigator.pop(context); // Also close detail page
@@ -242,7 +260,8 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Habit'),
-        content: const Text('Are you sure you want to delete this habit? This action cannot be undone.'),
+        content: const Text(
+            'Are you sure you want to delete this habit? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -252,7 +271,13 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
             onPressed: () async {
               final repository = ref.read(habitRepositoryProvider);
               await repository.deleteHabit(widget.habitId);
-                  ref.invalidate(habitsProvider);
+              // Invalidate all relevant providers for live updates
+              ref.invalidate(habitsProvider);
+              ref.invalidate(todayProgressProvider);
+              ref.invalidate(habitStreaksProvider);
+              ref.invalidate(completionStatsProvider);
+              ref.invalidate(userStatsProvider);
+              ref.invalidate(habitProgressProvider);
               if (context.mounted) {
                 Navigator.pop(context); // Close dialog
                 Navigator.pop(context); // Close detail page
@@ -266,4 +291,3 @@ class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
     );
   }
 }
-

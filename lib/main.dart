@@ -10,7 +10,7 @@ import 'features/assistant/presentation/pages/assistant_chat_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   // Load environment variables from .env file
   // Note: For production, consider using platform-specific environment variables
   // or build-time configuration instead of bundling .env in assets
@@ -18,10 +18,11 @@ void main() async {
     await dotenv.load(fileName: '.env');
   } catch (e) {
     debugPrint('Warning: Could not load .env file: $e');
-    debugPrint('Please create a .env file from .env.example in the project root');
+    debugPrint(
+        'Please create a .env file from .env.example in the project root');
     debugPrint('Make sure .env is listed in pubspec.yaml assets section');
   }
-  
+
   // Initialize Supabase if configured
   if (AppConfig.useSupabase) {
     try {
@@ -32,7 +33,7 @@ void main() async {
       // User should configure Supabase in .env file
     }
   }
-  
+
   runApp(
     const ProviderScope(
       child: SuccessApp(),
@@ -70,7 +71,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   final List<Widget> _pages = [
     const HabitsListPage(),
     const ProgressDashboard(),
-    const ProfilePage(),
+    // ProfilePage disabled for now
     const AssistantChatPage(),
   ];
 
@@ -99,11 +100,7 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
             selectedIcon: Icon(Icons.bar_chart),
             label: 'Progress',
           ),
-          NavigationDestination(
-            icon: Icon(Icons.person),
-            selectedIcon: Icon(Icons.person),
-            label: 'Profile',
-          ),
+          // Profile tab disabled for now
           NavigationDestination(
             icon: Icon(Icons.psychology),
             selectedIcon: Icon(Icons.psychology),
@@ -114,4 +111,3 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
     );
   }
 }
-

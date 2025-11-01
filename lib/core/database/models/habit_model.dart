@@ -14,13 +14,16 @@ class HabitModel {
   });
 
   Map<String, dynamic> toMap() {
-    return {
-      'id': id,
+    final map = <String, dynamic>{
       'name': name,
       'description': description,
       'created_at': createdAt.toIso8601String(),
       'updated_at': updatedAt.toIso8601String(),
     };
+    if (id != null) {
+      map['id'] = id;
+    }
+    return map;
   }
 
   factory HabitModel.fromMap(Map<String, dynamic> map) {
@@ -33,14 +36,14 @@ class HabitModel {
         id = int.tryParse(map['id'].toString());
       }
     }
-    
+
     // Handle DateTime from Supabase (might be String or DateTime)
     DateTime parseDateTime(dynamic value) {
       if (value is DateTime) return value;
       if (value is String) return DateTime.parse(value);
       throw FormatException('Invalid date format: $value');
     }
-    
+
     return HabitModel(
       id: id,
       name: map['name'] as String,
@@ -66,4 +69,3 @@ class HabitModel {
     );
   }
 }
-
