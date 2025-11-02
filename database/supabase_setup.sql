@@ -20,16 +20,28 @@ CREATE TABLE IF NOT EXISTS progress (
   UNIQUE(habit_id, date)
 );
 
+-- Create assistant_conversations table
+CREATE TABLE IF NOT EXISTS assistant_conversations (
+  id BIGSERIAL PRIMARY KEY,
+  user_id TEXT,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+  message TEXT NOT NULL,
+  timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- Create indexes for better query performance
 CREATE INDEX IF NOT EXISTS idx_progress_habit_id ON progress(habit_id);
 CREATE INDEX IF NOT EXISTS idx_progress_date ON progress(date);
 CREATE INDEX IF NOT EXISTS idx_progress_completed ON progress(completed);
 CREATE INDEX IF NOT EXISTS idx_habits_created_at ON habits(created_at);
+CREATE INDEX IF NOT EXISTS idx_assistant_conversations_user_id ON assistant_conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_assistant_conversations_timestamp ON assistant_conversations(timestamp);
 
 -- Enable Row Level Security (RLS) - optional but recommended
 -- For now, we'll allow all operations. You can customize this later for user-specific data
 ALTER TABLE habits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE progress ENABLE ROW LEVEL SECURITY;
+ALTER TABLE assistant_conversations ENABLE ROW LEVEL SECURITY;
 
 -- Create policies to allow all operations (for single-user app)
 -- For multi-user app, you'd want to add user_id column and restrict access
@@ -37,6 +49,9 @@ CREATE POLICY "Allow all operations on habits" ON habits
   FOR ALL USING (true) WITH CHECK (true);
 
 CREATE POLICY "Allow all operations on progress" ON progress
+  FOR ALL USING (true) WITH CHECK (true);
+
+CREATE POLICY "Allow all operations on assistant_conversations" ON assistant_conversations
   FOR ALL USING (true) WITH CHECK (true);
 
 -- Create a function to automatically update updated_at timestamp

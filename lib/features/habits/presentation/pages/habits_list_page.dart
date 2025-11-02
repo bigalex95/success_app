@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart' show debugPrint;
 import '../../../../core/database/models/habit_model.dart';
 import '../../../../core/database/models/progress_model.dart';
+import '../../../../core/database/supabase_service.dart';
 import '../../data/habit_repository.dart';
 import '../widgets/habit_card.dart';
 import 'habit_detail_page.dart';
@@ -27,11 +27,48 @@ final habitStreaksProvider =
   return await repository.calculateStreak(habitId);
 });
 
-class HabitsListPage extends ConsumerWidget {
+class HabitsListPage extends ConsumerStatefulWidget {
   const HabitsListPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<HabitsListPage> createState() => _HabitsListPageState();
+}
+
+class _HabitsListPageState extends ConsumerState<HabitsListPage> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Only set up real-time if Supabase is initialized
+    if (SupabaseService.isInitialized) {
+      // Listen to real-time habit changes and refresh data
+      SupabaseService.habitsStream.listen((_) {
+        if (mounted) {
+          debugPrint('[Realtime] Habits changed, refreshing data');
+          ref.invalidate(habitsProvider);
+          ref.invalidate(todayProgressProvider);
+          ref.invalidate(habitStreaksProvider);
+        }
+      });
+
+      // Listen to real-time progress changes and refresh data
+      SupabaseService.progressStream.listen((_) {
+        if (mounted) {
+          debugPrint('[Realtime] Progress changed, refreshing data');
+          ref.invalidate(todayProgressProvider);
+          ref.invalidate(habitStreaksProvider);
+          ref.invalidate(completionStatsProvider);
+          ref.invalidate(userStatsProvider);
+        }
+      });
+    } else {
+      debugPrint(
+          '[Realtime] ⚠️ Supabase not initialized, real-time sync disabled');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final habitsAsync = ref.watch(habitsProvider);
     final todayProgressAsync = ref.watch(todayProgressProvider);
 
@@ -150,14 +187,14 @@ class HabitsListPage extends ConsumerWidget {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          _showAddHabitDialog(context, ref);
+          _showAddHabitDialog(context);
         },
         child: const Icon(Icons.add),
       ),
     );
   }
 
-  void _showAddHabitDialog(BuildContext context, WidgetRef ref) {
+  void _showAddHabitDialog(BuildContext context) {
     final nameController = TextEditingController();
     final descriptionController = TextEditingController();
 

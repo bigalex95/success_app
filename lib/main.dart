@@ -5,7 +5,6 @@ import 'core/config/app_config.dart';
 import 'core/database/supabase_service.dart';
 import 'features/habits/presentation/pages/habits_list_page.dart';
 import 'features/progress/presentation/pages/progress_dashboard.dart';
-import 'features/gamification/presentation/pages/profile_page.dart';
 import 'features/assistant/presentation/pages/assistant_chat_page.dart';
 
 void main() async {
@@ -16,8 +15,9 @@ void main() async {
   // or build-time configuration instead of bundling .env in assets
   try {
     await dotenv.load(fileName: '.env');
+    debugPrint('[Init] ✅ .env file loaded successfully');
   } catch (e) {
-    debugPrint('Warning: Could not load .env file: $e');
+    debugPrint('[Init] ❌ Could not load .env file: $e');
     debugPrint(
         'Please create a .env file from .env.example in the project root');
     debugPrint('Make sure .env is listed in pubspec.yaml assets section');
@@ -26,12 +26,18 @@ void main() async {
   // Initialize Supabase if configured
   if (AppConfig.useSupabase) {
     try {
+      debugPrint('[Init] Initializing Supabase...');
       await SupabaseService.initialize();
-    } catch (e) {
-      debugPrint('Failed to initialize Supabase: $e');
-      // App will still run but database operations will fail
-      // User should configure Supabase in .env file
+      debugPrint('[Init] ✅ Supabase initialized successfully');
+      debugPrint('[Init] Real-time sync is enabled');
+    } catch (e, stackTrace) {
+      debugPrint('[Init] ❌ Failed to initialize Supabase: $e');
+      debugPrint('[Init] Stack trace: $stackTrace');
+      debugPrint('[Init] App will continue but database operations will fail');
+      // Don't throw - let the app show the error in the UI
     }
+  } else {
+    debugPrint('[Init] Supabase disabled in configuration');
   }
 
   runApp(

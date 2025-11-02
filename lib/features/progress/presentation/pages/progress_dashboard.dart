@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/database/supabase_service.dart';
 import '../../../habits/data/habit_repository.dart';
 import '../../../gamification/data/gamification_repository.dart';
 import '../../../gamification/data/models/user_stats_model.dart';
@@ -19,11 +20,43 @@ final userStatsProvider = FutureProvider<UserStatsModel>((ref) async {
   return await repository.getUserStats();
 });
 
-class ProgressDashboard extends ConsumerWidget {
+class ProgressDashboard extends ConsumerStatefulWidget {
   const ProgressDashboard({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<ProgressDashboard> createState() => _ProgressDashboardState();
+}
+
+class _ProgressDashboardState extends ConsumerState<ProgressDashboard> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Only set up real-time if Supabase is initialized
+    if (SupabaseService.isInitialized) {
+      // Listen to real-time changes and refresh stats
+      SupabaseService.progressStream.listen((_) {
+        if (mounted) {
+          debugPrint('[Realtime] Progress changed, refreshing dashboard');
+          ref.invalidate(completionStatsProvider);
+          ref.invalidate(userStatsProvider);
+        }
+      });
+
+      SupabaseService.habitsStream.listen((_) {
+        if (mounted) {
+          debugPrint('[Realtime] Habits changed, refreshing dashboard');
+          ref.invalidate(completionStatsProvider);
+        }
+      });
+    } else {
+      debugPrint(
+          '[Realtime] ⚠️ Supabase not initialized, real-time sync disabled for dashboard');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     debugPrint('[ProgressDashboard] Building dashboard UI');
     final statsAsync = ref.watch(completionStatsProvider);
     final userStatsAsync = ref.watch(userStatsProvider);

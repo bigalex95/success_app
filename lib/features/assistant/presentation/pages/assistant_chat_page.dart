@@ -1,8 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../../../core/config/app_config.dart';
+import '../../../../core/database/supabase_service.dart';
 import '../../data/slm_service.dart';
 import '../widgets/message_bubble.dart';
+import '../../data/assistant_habit_parser.dart';
+import '../../../habits/presentation/pages/habits_list_page.dart'
+    show habitRepositoryProvider;
+import '../../../../core/database/models/habit_model.dart';
+import '../../data/assistant_conversation_service.dart';
+import '../../data/assistant_message.dart';
+import '../../../progress/presentation/pages/progress_dashboard.dart'
+    show completionStatsProvider;
+import '../../../habits/presentation/pages/habits_list_page.dart'
+    show habitsProvider;
 
 class ChatMessage {
   final String text;
@@ -16,7 +28,8 @@ class ChatMessage {
   });
 }
 
-final chatMessagesProvider = StateNotifierProvider<ChatMessagesNotifier, List<ChatMessage>>((ref) {
+final chatMessagesProvider =
+    StateNotifierProvider<ChatMessagesNotifier, List<ChatMessage>>((ref) {
   return ChatMessagesNotifier();
 });
 
@@ -25,6 +38,10 @@ class ChatMessagesNotifier extends StateNotifier<List<ChatMessage>> {
 
   void addMessage(ChatMessage message) {
     state = [...state, message];
+  }
+
+  void setMessages(List<ChatMessage> messages) {
+    state = messages;
   }
 
   void clearMessages() {
@@ -65,6 +82,29 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
     }
   }
 
+  Future<List<ChatMessage>> _fetchRecentChatHistory({int limit = 10}) async {
+    final supabaseClient = Supabase.instance.client;
+    final conversationService = AssistantConversationService(supabaseClient);
+    const defaultUserId = 'default_user';
+    final messages = await conversationService.fetchMessages(
+        userId: defaultUserId, limit: limit);
+    return messages
+        .map((msg) => ChatMessage(
+              text: msg.message,
+              isUser: msg.role == 'user',
+              timestamp: msg.timestamp,
+            ))
+        .toList();
+  }
+
+  String buildChatContext(List<ChatMessage> messages) {
+    // Format as: User: ...\nAssistant: ...\n...
+    return messages
+        .map((msg) =>
+            msg.isUser ? 'User: ${msg.text}' : 'Assistant: ${msg.text}')
+        .join('\n');
+  }
+
   Future<void> _sendMessage() async {
     final text = _messageController.text.trim();
     if (text.isEmpty || _isLoading) return;
@@ -74,27 +114,57 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
       isUser: true,
       timestamp: DateTime.now(),
     );
-
     ref.read(chatMessagesProvider.notifier).addMessage(userMessage);
     _messageController.clear();
     setState(() => _isLoading = true);
 
-    // Scroll to show user message
+    // Save user message to Supabase
+    final supabaseClient = Supabase.instance.client;
+    final conversationService = AssistantConversationService(supabaseClient);
+    const defaultUserId = 'default_user';
+    await conversationService.saveMessage(
+      AssistantMessage(
+        userId: defaultUserId,
+        role: 'user',
+        message: text,
+        timestamp: DateTime.now(),
+      ),
+    );
+
     WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
 
     try {
       final slmService = ref.read(slmServiceProvider);
+
+      // Build complete context with habits and stats
       final contextBuilder = SLMContextBuilder();
-      final context = await contextBuilder.buildContext();
-      final response = await slmService.generateResponse(text, context);
+      final fullContext = await contextBuilder.buildContext();
+
+      // Fetch recent chat history for context
+      final recentMessages = await _fetchRecentChatHistory(limit: 10);
+      final chatHistory = buildChatContext(recentMessages);
+
+      // Merge contexts
+      fullContext['history'] = chatHistory;
+
+      final response = await slmService.generateResponse(text, fullContext);
 
       final assistantMessage = ChatMessage(
         text: response,
         isUser: false,
         timestamp: DateTime.now(),
       );
-
       ref.read(chatMessagesProvider.notifier).addMessage(assistantMessage);
+
+      // Save assistant message to Supabase
+      await conversationService.saveMessage(
+        AssistantMessage(
+          userId: defaultUserId,
+          role: 'assistant',
+          message: response,
+          timestamp: DateTime.now(),
+        ),
+      );
     } catch (e) {
       final errorMessage = ChatMessage(
         text: 'Sorry, I encountered an error: $e',
@@ -102,10 +172,53 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
         timestamp: DateTime.now(),
       );
       ref.read(chatMessagesProvider.notifier).addMessage(errorMessage);
+      await conversationService.saveMessage(
+        AssistantMessage(
+          userId: defaultUserId,
+          role: 'assistant',
+          message: 'Sorry, I encountered an error: $e',
+          timestamp: DateTime.now(),
+        ),
+      );
     } finally {
       setState(() => _isLoading = false);
       WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToBottom());
     }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChatHistory();
+
+    // Set up real-time sync for assistant messages
+    if (SupabaseService.isInitialized) {
+      SupabaseService.assistantStream.listen((_) {
+        if (mounted) {
+          debugPrint('[Realtime] Assistant messages changed, refreshing chat');
+          _loadChatHistory();
+        }
+      });
+    } else {
+      debugPrint(
+          '[Realtime] ⚠️ Supabase not initialized, real-time sync disabled for chat');
+    }
+  }
+
+  Future<void> _loadChatHistory() async {
+    final supabaseClient = Supabase.instance.client;
+    final conversationService = AssistantConversationService(supabaseClient);
+    const defaultUserId = 'default_user';
+    final messages = await conversationService.fetchMessages(
+        userId: defaultUserId, limit: 100);
+    final chatMessages = messages
+        .map((msg) => ChatMessage(
+              text: msg.message,
+              isUser: msg.role == 'user',
+              timestamp: msg.timestamp,
+            ))
+        .toList();
+    ref.read(chatMessagesProvider.notifier).setMessages(chatMessages);
   }
 
   @override
@@ -118,8 +231,14 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
         actions: [
           IconButton(
             icon: const Icon(Icons.clear_all),
-            onPressed: () {
+            onPressed: () async {
               ref.read(chatMessagesProvider.notifier).clearMessages();
+              // Clear chat history from Supabase
+              final supabaseClient = Supabase.instance.client;
+              final conversationService =
+                  AssistantConversationService(supabaseClient);
+              const defaultUserId = 'default_user';
+              await conversationService.clearMessages(userId: defaultUserId);
             },
             tooltip: 'Clear chat',
           ),
@@ -134,7 +253,8 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.psychology, size: 64, color: Colors.grey[400]),
+                        Icon(Icons.psychology,
+                            size: 64, color: Colors.grey[400]),
                         const SizedBox(height: 16),
                         Text(
                           'Ask me about your habits!',
@@ -144,14 +264,14 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
                           ),
                         ),
                         const SizedBox(height: 8),
-                      Text(
-                        'I can help you with tips, motivation, and tracking advice.',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.grey[500],
+                        Text(
+                          'I can help you with tips, motivation, and tracking advice.',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Colors.grey[500],
+                          ),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
-                      ),
                       ],
                     ),
                   )
@@ -170,9 +290,63 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
                         );
                       }
                       final message = messages[index];
-                      return MessageBubble(
-                        message: message.text,
-                        isUser: message.isUser,
+                      final parsedSuggestions = !message.isUser
+                          ? AssistantHabitParser.parseAllHabitSuggestions(
+                              message.text)
+                          : <ParsedHabitSuggestion>[];
+                      if (parsedSuggestions.isNotEmpty) {
+                        print(
+                            '[AssistantChatPage] Parsed ${parsedSuggestions.length} habit suggestion(s)');
+                      }
+                      return Column(
+                        crossAxisAlignment: message.isUser
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          MessageBubble(
+                            message: message.text,
+                            isUser: message.isUser,
+                          ),
+                          if (parsedSuggestions.isNotEmpty)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                  left: 48, top: 4, bottom: 8),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: parsedSuggestions.map((suggestion) {
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 8),
+                                    child: ElevatedButton.icon(
+                                      icon: const Icon(Icons.add_task),
+                                      label: Text('Add "${suggestion.name}"'),
+                                      onPressed: () async {
+                                        final repository =
+                                            ref.read(habitRepositoryProvider);
+                                        final now = DateTime.now();
+                                        await repository.createHabit(
+                                          HabitModel(
+                                            name: suggestion.name,
+                                            description: suggestion.description,
+                                            createdAt: now,
+                                            updatedAt: now,
+                                          ),
+                                        );
+                                        // Invalidate dashboard providers for live update
+                                        ref.invalidate(completionStatsProvider);
+                                        ref.invalidate(habitsProvider);
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                              content: Text(
+                                                  'Habit "${suggestion.name}" added!')),
+                                        );
+                                      },
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                        ],
                       );
                     },
                   ),
@@ -232,4 +406,3 @@ class _AssistantChatPageState extends ConsumerState<AssistantChatPage> {
     );
   }
 }
-

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../../../core/database/models/habit_model.dart';
 import '../../../../core/database/models/progress_model.dart';
+import '../../../../core/database/supabase_service.dart';
 import 'habits_list_page.dart';
 import '../../../progress/presentation/pages/progress_dashboard.dart'
     show completionStatsProvider, userStatsProvider;
@@ -35,6 +36,36 @@ final habitProgressProvider =
 });
 
 class _HabitDetailPageState extends ConsumerState<HabitDetailPage> {
+  @override
+  void initState() {
+    super.initState();
+
+    // Set up real-time listeners for this habit's data
+    if (SupabaseService.isInitialized) {
+      // Listen to habit changes (edit, delete)
+      SupabaseService.habitsStream.listen((_) {
+        if (mounted) {
+          debugPrint('[Realtime] Habit changed, refreshing detail page');
+          ref.invalidate(habitDetailProvider(widget.habitId));
+          ref.invalidate(habitStreaksProvider(widget.habitId));
+        }
+      });
+
+      // Listen to progress changes (mark complete/incomplete)
+      SupabaseService.progressStream.listen((_) {
+        if (mounted) {
+          debugPrint(
+              '[Realtime] Progress changed, refreshing habit detail progress');
+          ref.invalidate(habitProgressProvider(widget.habitId));
+          ref.invalidate(habitStreaksProvider(widget.habitId));
+        }
+      });
+    } else {
+      debugPrint(
+          '[Realtime] ⚠️ Supabase not initialized, real-time sync disabled for habit detail');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final habitAsync = ref.watch(habitDetailProvider(widget.habitId));
