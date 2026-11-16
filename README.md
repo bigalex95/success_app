@@ -1,166 +1,79 @@
-# Success - Habit Tracking App
+# Success
 
-A comprehensive Flutter app for tracking habits with gamification and AI assistant integration, featuring **real-time synchronization** across all devices.
+A Flutter habit tracker with streaks, points and levels, and an AI assistant that can answer questions about your habits. Data lives in Supabase, or in a local SQLite database when Supabase is turned off.
 
-## ✨ Features
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+![Flutter](https://img.shields.io/badge/Flutter-Dart%203-02569B)
 
-- **Habit Management**: Create, edit, and delete habits with easy tracking
-- **Real-Time Sync**: Changes sync instantly across all devices (Web, Linux, Android, iOS)
-- **Progress Tracking**: Visualize your progress with streaks and statistics
-- **Gamification**: Earn points, level up, and unlock achievements
-- **AI Assistant**: Get personalized habit advice with multiple AI provider options (Gemini, Ollama, OpenAI)
-- **Cross-Platform**: Works on Web, Linux, Windows, macOS, Android, iOS
+<!-- TODO: screenshots (habit list, progress dashboard, achievements, assistant chat) -->
 
-## 🛠 Tech Stack
+## Features
 
-- **Frontend**: Flutter 3.0+ with Material Design 3
-- **State Management**: Riverpod
-- **Database**: Supabase (PostgreSQL) with real-time subscriptions
-- **AI Integration**:
-  - Google Gemini API
-  - Ollama (local models)
-  - OpenAI-compatible APIs
-- **Real-Time**: Supabase Real-time (WebSocket-based)
+- Create, edit and delete habits; mark daily completion.
+- Progress dashboard with streaks (`streakBufferDays` allows a one-day buffer).
+- Gamification: points, levels (100 points per level) and achievements.
+- AI assistant chat with three interchangeable providers: Ollama (local), Google Gemini, or an OpenAI-compatible HTTP API. It can suggest habits from natural-language text, and the conversation is stored in the `assistant_conversations` table.
+- Supabase backend with realtime subscriptions, so changes show up on other running instances.
+- Optional local mode: set `USE_SUPABASE=false` to use SQLite (`sqflite`) instead.
 
-## 🚀 Quick Setup
+## Architecture
 
-1. **Clone and install dependencies**:
+```
+lib/
+  main.dart                       loads .env, initializes Supabase, runs the app
+  core/config/app_config.dart     reads .env values
+  core/database/                  models, SQLite helper, Supabase service
+  features/
+    habits/                       repository, list/detail pages, widgets
+    progress/                     dashboard, streak widget
+    gamification/                 repository, achievements/profile pages
+    assistant/                    SLM service, providers (ollama, gemini, api), chat UI
+database/                         supabase_setup.sql, enable_realtime.sql
+tools/check_connections.dart      connectivity check for Ollama and Supabase
+docs/                             setup guides
+```
+
+State management is Riverpod (`flutter_riverpod`). Configuration is loaded at startup with `flutter_dotenv`.
+
+## Getting started
+
+Prerequisites: Flutter SDK (Dart `>=3.0.0 <4.0.0`). Platform folders present in the repo: `android`, `linux`, `web`.
 
 ```bash
-git clone <repository-url>
-cd success_app
 flutter pub get
+cp .env.example .env     # .env is listed as a Flutter asset, so the file must exist
 ```
 
-2. **Configure environment variables**:
+Edit `.env`. Variable names (see `.env.example`):
 
-   - Copy `.env.example` to `.env`
-   - Add your Supabase credentials (see `docs/SUPABASE_SETUP.md`)
-   - Add your AI provider API key (see `docs/AI_PROVIDER_SETUP.md`)
+| Variable | Purpose |
+|---|---|
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Supabase project (Settings, API) |
+| `USE_SUPABASE` | `true` (default) or `false` for local SQLite |
+| `SLM_PROVIDER` | `ollama`, `gemini` or `api` |
+| `OLLAMA_BASE_URL`, `OLLAMA_MODEL` | local Ollama |
+| `GEMINI_API_KEY`, `GEMINI_MODEL` | Gemini |
+| `API_BASE_URL`, `API_KEY` | OpenAI-compatible API |
 
-3. **Set up database**:
+Set up the database (skip if `USE_SUPABASE=false`): run `database/supabase_setup.sql`, then `database/enable_realtime.sql` in the Supabase SQL editor.
 
-   - Run SQL scripts in `database/` folder in your Supabase project
-   - Enable real-time: `database/enable_realtime.sql`
-
-4. **Run the app**:
+Run:
 
 ```bash
-# For Linux
-flutter run -d linux
-
-# For Web (Chrome)
-flutter run -d chrome
-
-# For Android
-flutter run -d android
+flutter run -d linux     # or: -d chrome, -d android
+dart run tools/check_connections.dart   # optional connectivity check
 ```
 
-## 📚 Documentation
+More detail: [Supabase setup](docs/SUPABASE_SETUP.md), [AI providers](docs/AI_PROVIDER_SETUP.md), [Ollama](docs/OLLAMA_SETUP.md), [environment variables](docs/README_ENV.md), [realtime](docs/REALTIME_SETUP.md).
 
-All documentation is in the `docs/` folder:
+## Status and limitations
 
-- **[Quick Start Guide](docs/QUICK_START.md)** - Get started quickly
-- **[Supabase Setup](docs/SUPABASE_SETUP.md)** - Database configuration
-- **[AI Provider Setup](docs/AI_PROVIDER_SETUP.md)** - Configure Gemini, Ollama, or OpenAI
-- **[Real-Time Sync](docs/REALTIME_SETUP.md)** - How real-time sync works
-- **[Environment Variables](docs/README_ENV.md)** - All .env options
+- Personal project, version 1.0.0. There are no automated tests.
+- No user authentication: the app does not sign users in, and the SQL policies in `database/supabase_setup.sql` allow all operations to anyone holding the anon key. Use a private Supabase project and do not store sensitive data. Add auth and per-user policies before any shared deployment.
+- `.env` is bundled as an asset, so any key in it ships inside the built app. Use a personal build only, and do not put paid API keys into builds you distribute.
+- The leaderboard widget is a placeholder.
+- Only `android`, `linux` and `web` platform folders exist; iOS, macOS and Windows would need `flutter create .`.
 
-## Project Structure
+## License
 
-```
-lib/
-├── main.dart
-├── core/
-│   ├── config/          # App configuration
-│   ├── database/        # Database models and helper
-│   └── utils/           # Utility functions
-└── features/
-    ├── habits/          # Habit management
-    ├── progress/        # Progress tracking
-    ├── gamification/    # Points, levels, achievements
-    └── assistant/       # AI assistant integration
-```
-
-## 🤖 AI Integration
-
-The app supports multiple AI providers:
-
-- **Google Gemini** (Recommended): Fast and free tier available
-- **Ollama**: Local models for privacy (requires local installation)
-- **OpenAI/Anthropic**: API-compatible services
-
-Configure in `.env`:
-
-```env
-SLM_PROVIDER=gemini  # or 'ollama', 'api'
-GEMINI_API_KEY=your_key_here
-GEMINI_MODEL=gemini-2.5-flash
-```
-
-The assistant can:
-
-- Parse natural language to create habits
-- Provide personalized habit advice
-- Answer questions about your progress
-- Messages sync in real-time across devices
-
-## 💾 Database
-
-Powered by Supabase (PostgreSQL):
-
-- **habits**: Habit definitions and metadata
-- **progress**: Daily completion tracking
-- **assistant_conversations**: AI chat history
-
-SQL setup scripts in `database/` folder.
-
-## 🔄 Real-Time Synchronization
-
-Changes sync **instantly** across all devices:
-
-- Create a habit on web → appears immediately on mobile
-- Mark progress on mobile → updates instantly on desktop
-- Send chat message → appears in all connected instances
-
-Built with Supabase Real-time using WebSocket connections.
-
-## 🏗 Development
-
-**Architecture**:
-
-- **State Management**: Riverpod with providers
-- **Database Layer**: Supabase client with real-time subscriptions
-- **UI**: Material Design 3 with responsive layouts
-- **Real-Time**: Stream-based updates with automatic cache invalidation
-
-**Project Structure**:
-
-```
-lib/
-├── main.dart                    # App entry point
-├── core/
-│   ├── config/                  # App configuration
-│   └── database/                # Supabase service & models
-└── features/
-    ├── habits/                  # Habit CRUD & UI
-    ├── progress/                # Analytics & dashboards
-    ├── gamification/            # Points & achievements
-    └── assistant/               # AI chat interface
-```
-
-**Database Scripts**:
-
-```
-database/
-├── supabase_setup.sql          # Initial database schema
-└── enable_realtime.sql         # Enable real-time subscriptions
-```
-
-## 🤝 Contributing
-
-Contributions are welcome! Please check existing issues or create new ones.
-
-## 📄 License
-
-MIT License
+MIT, see [LICENSE](LICENSE).
